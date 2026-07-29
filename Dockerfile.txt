@@ -1,0 +1,39 @@
+# ۱. استفاده از تصویر پایه سبک و پایدار پایتون
+FROM python:3.10-slim
+
+# ۲. تنظیم متغیرهای محیطی بهینه برای پایتون و مسیرهای کاربر
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
+
+# ۳. نصب کتابخانه سیستمی ضروری برای اجرای PyTorch CPU (OpenMP) و پاک‌سازی کش apt
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ۴. ایجاد کاربر غیر‌ریشه (UID=1000) طبق استاندارد الزامی HuggingFace Spaces
+RUN useradd -m -u 1000 user
+
+# ۵. تنظیم دایرکتوری کاری و اعطای دسترسی به کاربر
+WORKDIR /code
+RUN chown user:user /code
+
+# ۶. کپی فایل نیازمندی‌ها با مالکیت کاربر غیر‌ریشه
+COPY --chown=user:user requirements.txt /code/
+
+# ۷. سوئیچ به کاربر غیر‌ریشه قبل از نصب وابستگی‌ها
+USER user
+
+# ۸. نصب بهینه‌شده‌ وابستگی‌ها بدون ذخیره‌سازی کش
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ۹. کپی کل فایل‌های پروژه (شامل app.py و فایل اوزان npz/pth) با مالکیت کاربر
+COPY --chown=user:user . /code
+
+# ۱۰. باز کردن پورت استاندارد HuggingFace Spaces
+EXPOSE 7860
+
+# ۱۱. اجرای وب‌سرویس استنتاج با uvicorn روی آدرس 0.0.0.0:7860
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
